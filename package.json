@@ -1,0 +1,19 @@
+{
+  "name": "grinch-quest-bot",
+  "version": "1.0.0",
+  "description": "Telegram quest bot - Grinch stole Secret Santa",
+  "main": "src/bot.js",
+  "scripts": {
+    "start": "node src/bot.js",
+    "dev": "node src/bot.js"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": ["telegram", "bot", "quest"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}
