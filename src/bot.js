@@ -26,6 +26,12 @@ server.listen(PORT, () => {
 // Хранилище состояний пользователей (в продакшене использовать БД)
 const userStates = {};
 
+// Хранилище file_id видео (для быстрой отправки без загрузки файлов)
+const videoFileIds = {};
+
+// Режим администратора для замены видео
+const adminMode = {}; // { userId: { mode: 'replace_video', videoNumber: 2 } }
+
 // Этапы квеста
 const STATES = {
   START: 'start',
@@ -101,6 +107,18 @@ function getRandomWaitingMessage() {
 
 // Функция для отправки видео
 async function sendVideo(chatId, videoNumber, options = {}) {
+  // Если есть сохраненный file_id, используем его (быстрее)
+  if (videoFileIds[videoNumber]) {
+    try {
+      const sentMsg = await bot.sendVideo(chatId, videoFileIds[videoNumber], options);
+      return true;
+    } catch (error) {
+      console.log(`File_id для видео ${videoNumber} устарел, загружаем из файла...`);
+      delete videoFileIds[videoNumber]; // Удаляем устаревший file_id
+    }
+  }
+
+  // Иначе загружаем из локального файла
   const videoPath = getVideoPath(videoNumber);
 
   if (!videoPath || !fs.existsSync(videoPath)) {
@@ -110,7 +128,12 @@ async function sendVideo(chatId, videoNumber, options = {}) {
   }
 
   try {
-    await bot.sendVideo(chatId, videoPath, options);
+    const sentMsg = await bot.sendVideo(chatId, videoPath, options);
+    // Сохраняем file_id для будущих отправок
+    if (sentMsg && sentMsg.video && sentMsg.video.file_id) {
+      videoFileIds[videoNumber] = sentMsg.video.file_id;
+      console.log(`✅ Сохранен file_id для видео ${videoNumber}`);
+    }
     return true;
   } catch (error) {
     console.error(`Ошибка отправки видео ${videoNumber}:`, error);
@@ -143,6 +166,132 @@ bot.onText(/\/start/, async (msg) => {
   });
 });
 
+// Обработчик команды /admin - админ-панель
+bot.onText(/\/admin/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  // Проверка что это админ
+  if (!ADMIN_CHAT_ID || userId.toString() !== ADMIN_CHAT_ID.toString()) {
+    await bot.sendMessage(chatId, '❌ У вас нет доступа к админ-панели');
+    return;
+  }
+
+  const adminMenu = `
+🎬 *Админ-панель Grinch Quest Bot*
+
+*Доступные команды:*
+
+📹 *Замена видео:*
+\`/replace 0\` - Заменить видео 0 (приветствие)
+\`/replace 1\` - Заменить видео 1 (Несмеяна)
+\`/replace 2\` - Заменить видео 2 (Оратор)
+\`/replace 3\` - Заменить видео 3 (Елка)
+\`/replace 4\` - Заменить видео 4 (Танец)
+\`/replace 5\` - Заменить видео 5 (Финал от Гринча)
+\`/replace 6\` - Заменить видео 6 (Подарок от Санты)
+
+📊 *Информация:*
+\`/videos\` - Список текущих видео
+\`/stats\` - Статистика бота
+
+*Как заменить видео:*
+1. Отправьте команду \`/replace N\` (где N - номер видео)
+2. Отправьте новое видео боту
+3. Готово! Видео заменено моментально
+`;
+
+  await bot.sendMessage(chatId, adminMenu, { parse_mode: 'Markdown' });
+});
+
+// Обработчик команды /replace - замена видео
+bot.onText(/\/replace (\d+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const videoNumber = parseInt(match[1]);
+
+  // Проверка что это админ
+  if (!ADMIN_CHAT_ID || userId.toString() !== ADMIN_CHAT_ID.toString()) {
+    await bot.sendMessage(chatId, '❌ У вас нет доступа к этой команде');
+    return;
+  }
+
+  // Проверка валидности номера
+  if (videoNumber < 0 || videoNumber > 6) {
+    await bot.sendMessage(chatId, '❌ Неверный номер видео. Доступны номера от 0 до 6');
+    return;
+  }
+
+  // Устанавливаем режим замены видео
+  adminMode[userId] = { mode: 'replace_video', videoNumber };
+
+  const videoNames = ['приветствие', 'Несмеяна', 'Оратор', 'Елка', 'Танец', 'Финал от Гринча', 'Подарок от Санты'];
+  await bot.sendMessage(chatId, `📹 Отправьте новое видео для замены видео ${videoNumber} (${videoNames[videoNumber]})`);
+});
+
+// Обработчик команды /videos - список видео
+bot.onText(/\/videos/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  // Проверка что это админ
+  if (!ADMIN_CHAT_ID || userId.toString() !== ADMIN_CHAT_ID.toString()) {
+    await bot.sendMessage(chatId, '❌ У вас нет доступа к этой команде');
+    return;
+  }
+
+  const videoNames = [
+    '0️⃣ Приветствие',
+    '1️⃣ Несмеяна',
+    '2️⃣ Оратор',
+    '3️⃣ Елка',
+    '4️⃣ Танец',
+    '5️⃣ Финал от Гринча',
+    '6️⃣ Подарок от Санты'
+  ];
+
+  let videoList = '📹 *Текущие видео:*\n\n';
+
+  for (let i = 0; i < 7; i++) {
+    const hasFileId = videoFileIds[i] ? '✅' : '📁';
+    const source = videoFileIds[i] ? '(через Telegram)' : '(из файла)';
+    videoList += `${videoNames[i]} ${hasFileId} ${source}\n`;
+  }
+
+  videoList += '\n✅ - загружено через Telegram\n📁 - используется локальный файл';
+
+  await bot.sendMessage(chatId, videoList, { parse_mode: 'Markdown' });
+});
+
+// Обработчик команды /stats - статистика
+bot.onText(/\/stats/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  // Проверка что это админ
+  if (!ADMIN_CHAT_ID || userId.toString() !== ADMIN_CHAT_ID.toString()) {
+    await bot.sendMessage(chatId, '❌ У вас нет доступа к этой команде');
+    return;
+  }
+
+  const totalUsers = Object.keys(userStates).length;
+  const completedUsers = Object.values(userStates).filter(s => s.state === STATES.COMPLETED).length;
+  const activeUsers = totalUsers - completedUsers;
+
+  const stats = `
+📊 *Статистика бота:*
+
+👥 Всего пользователей: ${totalUsers}
+✅ Завершили квест: ${completedUsers}
+🎮 В процессе: ${activeUsers}
+
+🎬 Видео через Telegram: ${Object.keys(videoFileIds).length}/7
+📁 Видео из файлов: ${7 - Object.keys(videoFileIds).length}/7
+`;
+
+  await bot.sendMessage(chatId, stats, { parse_mode: 'Markdown' });
+});
+
 // Обработчик нажатия на кнопку "Начать поиск багов"
 bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
@@ -167,6 +316,30 @@ bot.on('message', async (msg) => {
 
   // Игнорируем команды
   if (msg.text && msg.text.startsWith('/')) {
+    return;
+  }
+
+  // Проверяем режим администратора
+  if (adminMode[userId] && adminMode[userId].mode === 'replace_video') {
+    const hasVideo = msg.video;
+
+    if (!hasVideo) {
+      await bot.sendMessage(chatId, '❌ Пожалуйста, отправьте видео (не кружочек, не фото, а обычное видео)');
+      return;
+    }
+
+    const videoNumber = adminMode[userId].videoNumber;
+    const videoNames = ['приветствие', 'Несмеяна', 'Оратор', 'Елка', 'Танец', 'Финал от Гринча', 'Подарок от Санты'];
+
+    // Сохраняем file_id нового видео
+    videoFileIds[videoNumber] = msg.video.file_id;
+
+    // Выходим из режима замены
+    delete adminMode[userId];
+
+    await bot.sendMessage(chatId, `✅ Видео ${videoNumber} (${videoNames[videoNumber]}) успешно заменено!\n\nТеперь все пользователи будут получать новое видео. Изменения применены моментально.`);
+
+    console.log(`✅ Админ заменил видео ${videoNumber} на file_id: ${msg.video.file_id}`);
     return;
   }
 
