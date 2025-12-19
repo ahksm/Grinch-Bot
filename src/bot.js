@@ -6,6 +6,9 @@ const http = require('http');
 // Токен бота (из переменной окружения или локально)
 const token = process.env.TELEGRAM_BOT_TOKEN || '7970494384:AAGK7b0yPDFocAoG4Mb0zA6kZvCmApBmNYU';
 
+// ID заказчика для пересылки видео (получите его через @userinfobot в Telegram)
+const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || null;
+
 // Создаем бота
 const bot = new TelegramBot(token, { polling: true });
 
@@ -195,6 +198,24 @@ bot.on('message', async (msg) => {
   if (hasVideo) {
     // Отправляем случайное сообщение о просмотре
     await bot.sendMessage(chatId, getRandomWatchingMessage());
+
+    // Пересылаем видео заказчику (если указан ADMIN_CHAT_ID)
+    if (ADMIN_CHAT_ID) {
+      try {
+        const userName = msg.from.username ? `@${msg.from.username}` : msg.from.first_name || 'Пользователь';
+        const userInfo = `👤 От: ${userName} (ID: ${userId})\n🎬 Этап: ${currentState}`;
+
+        // Пересылаем видео
+        if (msg.video) {
+          await bot.sendVideo(ADMIN_CHAT_ID, msg.video.file_id, { caption: userInfo });
+        } else if (msg.video_note) {
+          await bot.sendVideoNote(ADMIN_CHAT_ID, msg.video_note.file_id);
+          await bot.sendMessage(ADMIN_CHAT_ID, userInfo);
+        }
+      } catch (error) {
+        console.error('Ошибка при пересылке видео админу:', error.message);
+      }
+    }
 
     // Переходим к следующему этапу
     switch (currentState) {
