@@ -1,12 +1,24 @@
 const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 
 // Токен бота (из переменной окружения или локально)
 const token = process.env.TELEGRAM_BOT_TOKEN || '7970494384:AAGK7b0yPDFocAoG4Mb0zA6kZvCmApBmNYU';
 
 // Создаем бота
 const bot = new TelegramBot(token, { polling: true });
+
+// Создаем простой HTTP сервер для Render (чтобы Web Service не падал)
+const PORT = process.env.PORT || 3000;
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+  res.end('Grinch Bot is running! 🎄');
+});
+
+server.listen(PORT, () => {
+  console.log(`🌐 HTTP сервер запущен на порту ${PORT}`);
+});
 
 // Хранилище состояний пользователей (в продакшене использовать БД)
 const userStates = {};
