@@ -105,6 +105,12 @@ function getRandomWaitingMessage() {
   return WAITING_MESSAGES[Math.floor(Math.random() * WAITING_MESSAGES.length)];
 }
 
+// Функция для задержки (промис)
+function delay(min, max) {
+  const ms = Math.floor(Math.random() * (max - min + 1)) + min;
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // Функция для отправки видео
 async function sendVideo(chatId, videoNumber, options = {}) {
   // Если есть сохраненный file_id, используем его (быстрее)
@@ -369,6 +375,9 @@ bot.on('message', async (msg) => {
 
   // Если пользователь отправил видео или кружочек
   if (hasVideo) {
+    // Задержка 3-5 секунд перед сообщением о просмотре
+    await delay(3000, 5000);
+
     // Отправляем случайное сообщение о просмотре
     await bot.sendMessage(chatId, getRandomWatchingMessage());
 
@@ -423,9 +432,19 @@ bot.on('message', async (msg) => {
         // Отправляем видео 5
         await sendVideo(chatId, 5);
 
+        // Задержка 1-2 секунды
+        await delay(1000, 2000);
+
         // Отправляем сообщения о смене персонажей
         await bot.sendMessage(chatId, 'Гринч покинул(а) чат');
+
+        // Задержка 1-2 секунды
+        await delay(1000, 2000);
+
         await bot.sendMessage(chatId, 'Санта Клаус зашел(а)в чат');
+
+        // Задержка 1-2 секунды
+        await delay(1000, 2000);
 
         // Отправляем видео 6
         await sendVideo(chatId, 6);
