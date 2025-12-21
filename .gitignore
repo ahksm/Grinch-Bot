@@ -8,6 +8,9 @@ npm-debug.log*
 # Environment variables
 .env
 
+# Сохраненные file_id видео (не перезаписываются при деплое)
+video_file_ids.json
+
 # OS files
 .DS_Store
 Thumbs.db

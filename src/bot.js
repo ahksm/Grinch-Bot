@@ -26,8 +26,34 @@ server.listen(PORT, () => {
 // Хранилище состояний пользователей (в продакшене использовать БД)
 const userStates = {};
 
+// Путь к файлу для хранения file_id
+const VIDEO_FILE_IDS_PATH = path.join(__dirname, '..', 'video_file_ids.json');
+
+// Загрузка сохраненных file_id из файла
+function loadVideoFileIds() {
+  try {
+    if (fs.existsSync(VIDEO_FILE_IDS_PATH)) {
+      const data = fs.readFileSync(VIDEO_FILE_IDS_PATH, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('Ошибка загрузки video_file_ids.json:', error.message);
+  }
+  return {};
+}
+
+// Сохранение file_id в файл
+function saveVideoFileIds() {
+  try {
+    fs.writeFileSync(VIDEO_FILE_IDS_PATH, JSON.stringify(videoFileIds, null, 2), 'utf8');
+    console.log('✅ File IDs сохранены в video_file_ids.json');
+  } catch (error) {
+    console.error('❌ Ошибка сохранения video_file_ids.json:', error.message);
+  }
+}
+
 // Хранилище file_id видео (для быстрой отправки без загрузки файлов)
-const videoFileIds = {};
+const videoFileIds = loadVideoFileIds();
 
 // Режим администратора для замены видео
 const adminMode = {}; // { userId: { mode: 'replace_video', videoNumber: 2 } }
@@ -138,6 +164,7 @@ async function sendVideo(chatId, videoNumber, options = {}) {
     // Сохраняем file_id для будущих отправок
     if (sentMsg && sentMsg.video && sentMsg.video.file_id) {
       videoFileIds[videoNumber] = sentMsg.video.file_id;
+      saveVideoFileIds(); // Сохраняем в файл
       console.log(`✅ Сохранен file_id для видео ${videoNumber}`);
     }
     return true;
@@ -339,6 +366,7 @@ bot.on('message', async (msg) => {
 
     // Сохраняем file_id нового видео
     videoFileIds[videoNumber] = msg.video.file_id;
+    saveVideoFileIds(); // Сохраняем в файл
 
     // Выходим из режима замены
     delete adminMode[userId];
@@ -375,10 +403,7 @@ bot.on('message', async (msg) => {
 
   // Если пользователь отправил видео или кружочек
   if (hasVideo) {
-    // Задержка 3-5 секунд перед сообщением о просмотре
-    await delay(3000, 5000);
-
-    // Отправляем случайное сообщение о просмотре
+    // Отправляем случайное сообщение о просмотре моментально
     await bot.sendMessage(chatId, getRandomWatchingMessage());
 
     // Пересылаем видео заказчику (если указан ADMIN_CHAT_ID)
@@ -398,6 +423,9 @@ bot.on('message', async (msg) => {
         console.error('Ошибка при пересылке видео админу:', error.message);
       }
     }
+
+    // Задержка 7 секунд после текста "просмотр" перед следующим видео
+    await delay(7000, 7000);
 
     // Переходим к следующему этапу
     switch (currentState) {
@@ -475,3 +503,11 @@ console.log('   3_*.mp4 - Задание "Елка"');
 console.log('   4_*.mp4 - Задание "Танец"');
 console.log('   5_*.mp4 - Финал (последнее задание от Гринча)');
 console.log('   6_*.mp4 - Финальное видео с подарком (от Санты)');
+
+const loadedCount = Object.keys(videoFileIds).length;
+if (loadedCount > 0) {
+  console.log(`\n✅ Загружено ${loadedCount} file_id из video_file_ids.json`);
+  console.log('   Эти видео будут отправляться моментально (без загрузки файлов)');
+} else {
+  console.log('\n📝 Нет сохраненных file_id. Видео будут загружаться из папки videos/');
+}
